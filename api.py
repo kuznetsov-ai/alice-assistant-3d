@@ -73,6 +73,7 @@ DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_LEAD_CHAT_ID = os.getenv('TELEGRAM_LEAD_CHAT_ID', '')
 LEADS_LOG = Path(os.getenv('ALICE_LEADS_LOG', WORKSPACE / 'leads.jsonl'))
+CHAT_LOG = Path(os.getenv('ALICE_CHAT_LOG', WORKSPACE.parent / 'chat.jsonl'))
 
 # ----- Calendars (personal only) -----
 
@@ -266,10 +267,28 @@ def get_live_context():
 # Chat endpoint (both modes)
 # ============================================================
 
+def log_chat(ip, ua, user_msg, reply):
+    """Append one chat exchange to JSONL (audit / training data / analytics)."""
+    try:
+        CHAT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        rec = {
+            'ts': datetime.now(timezone.utc).isoformat(),
+            'ip': ip or '',
+            'ua': (ua or '')[:200],
+            'user': (user_msg or '')[:2000],
+            'reply': (reply or '')[:4000],
+        }
+        with CHAT_LOG.open('a', encoding='utf-8') as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+    except Exception as e:
+        print(f"[Chat log] {e}")
+
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     global chat_history
 
+    ip = None
     if GUEST_MODE:
         ok, ip = rate_limit('chat', limit=10, window_sec=600)
         if not ok:
@@ -305,9 +324,15 @@ def chat():
 
     if not reply:
         msg = "Brain unreachable — try again in a sec." if GUEST_MODE else 'Упс, не могу связаться с мозгом...'
+        if GUEST_MODE:
+            log_chat(ip, request.headers.get('User-Agent', ''), user_message, '[no reply]')
         return jsonify({'reply': msg}), 200
 
     chat_history.append({'role': 'assistant', 'content': reply})
+
+    if GUEST_MODE:
+        log_chat(ip, request.headers.get('User-Agent', ''), user_message, reply)
+
     return jsonify({'reply': reply})
 
 

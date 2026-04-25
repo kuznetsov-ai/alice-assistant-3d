@@ -42,26 +42,24 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 .state-party .aura-1{background:radial-gradient(ellipse,rgba(236,72,153,.4),transparent 70%);animation:ad1 2s ease-in-out infinite}
 .state-party .aura-2{background:radial-gradient(ellipse,rgba(168,85,247,.25),transparent 70%);animation:ad2 2.5s ease-in-out infinite}
 
-/* 3D canvas — small floating avatar bottom-center (ChatGPT-style).
-   !important needed because Three.js setSize() and applyPortraitOffset write inline styles. */
+/* 3D avatar widget — centered on screen (vertical & horizontal middle). */
 #avatar-canvas{
   position:fixed !important;
   inset:auto !important;
-  top:auto !important;
-  bottom:120px !important;
+  top:50% !important;
   left:50% !important;
-  transform:translateX(-50%) !important;
-  width:140px !important;
-  height:140px !important;
+  bottom:auto !important;
+  transform:translate(-50%,-50%) !important;
+  width:180px !important;
+  height:180px !important;
   z-index:8 !important;
   pointer-events:none !important;
   border-radius:50%;
   mask-image:radial-gradient(circle,black 60%,transparent 100%);
   -webkit-mask-image:radial-gradient(circle,black 60%,transparent 100%);
-  border:1px solid rgba(249,115,22,.15);
 }
 @media (max-width:640px){
-  #avatar-canvas{ width:96px !important; height:96px !important; bottom:130px !important; }
+  #avatar-canvas{ width:140px !important; height:140px !important; }
 }
 .aura{display:none !important}
 #bg-canvas{position:fixed;inset:0;z-index:0;opacity:.4}
@@ -72,15 +70,34 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 .load-bar{width:200px;height:3px;background:rgba(255,255,255,.1);border-radius:2px;margin:12px auto 0;overflow:hidden}
 .load-fill{height:100%;background:rgba(249,115,22,.6);border-radius:2px;transition:width .3s}
 
-/* Chat — primary surface (ChatGPT-style: scrollable, history persists) */
-#chat-area{position:fixed;top:max(56px,env(safe-area-inset-top,56px));left:0;right:0;bottom:280px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:16px 14px 24px;z-index:10;pointer-events:auto}
+/* Chat — top, centered horizontally, fixed width column */
+#chat-area{
+  position:fixed;
+  top:max(56px,env(safe-area-inset-top,56px));
+  left:50%;
+  transform:translateX(-50%);
+  width:min(640px,calc(100vw - 28px));
+  max-height:calc(50vh - 110px);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  padding:16px 14px 24px;
+  z-index:10;
+  pointer-events:auto;
+}
 #chat-area::-webkit-scrollbar{width:4px}
 #chat-area::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
-.msg{padding:12px 16px;border-radius:16px;font-size:15px;line-height:1.55;max-width:88%;opacity:0;animation:mi .35s ease-out forwards;word-wrap:break-word;white-space:pre-wrap}
-.msg.user{align-self:flex-end;background:rgba(99,102,241,.32);border:1px solid rgba(99,102,241,.4);color:#e8eaff;border-bottom-right-radius:4px}
-.msg.alice{align-self:flex-start;background:rgba(20,20,28,.95);border:1px solid rgba(249,115,22,.25);color:#f5f5f7;border-bottom-left-radius:4px}
+.msg{padding:12px 16px;border-radius:16px;font-size:15px;line-height:1.55;max-width:92%;opacity:0;animation:mi .35s ease-out forwards;word-wrap:break-word;white-space:pre-wrap;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.msg.user{align-self:flex-end;background:rgba(99,102,241,.42);border:1px solid rgba(99,102,241,.5);color:#fff;border-bottom-right-radius:4px}
+.msg.alice{align-self:flex-start;background:rgba(20,20,28,.92);border:1px solid rgba(249,115,22,.3);color:#f5f5f7;border-bottom-left-radius:4px}
 @keyframes mi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@media (max-width:640px){#chat-area{bottom:300px;padding:12px 10px 20px} .msg{font-size:14.5px}}
+@media (max-width:640px){
+  #chat-area{ max-height:calc(45vh - 80px); padding:12px 10px 16px }
+  .msg{font-size:14.5px;padding:11px 14px}
+}
 
 /* Controls */
 #controls{position:absolute;bottom:max(15px,env(safe-area-inset-bottom,15px));left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;z-index:20;width:90%;max-width:400px}
@@ -111,15 +128,11 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 .av-btn:active{transform:scale(.9)}
 @keyframes hi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-/* RU/EN mic-language toggle */
-#lang-toggle-btn{position:absolute;right:max(16px,env(safe-area-inset-right,16px));bottom:138px;width:42px;height:32px;border-radius:16px;border:1px solid rgba(165,180,252,.3);background:rgba(99,102,241,.12);color:#cbd5ff;font-family:'SF Mono',Menlo,monospace;font-size:12px;font-weight:600;cursor:pointer;z-index:21;-webkit-tap-highlight-color:transparent;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
-#lang-toggle-btn:hover,#lang-toggle-btn:active{background:rgba(249,115,22,.2);border-color:rgba(249,115,22,.5);color:#fed7aa}
-@media (max-width:640px){#lang-toggle-btn{bottom:158px;right:14px}}
-
-/* Quick-action chips (just above the input row) */
-#quick-actions{position:fixed;bottom:215px;left:0;right:0;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:0 16px;z-index:12;pointer-events:none;opacity:0;animation:hi .8s ease-out 1.5s forwards;transition:opacity .3s}
+/* Quick-action chips (between centered avatar and the input row) */
+#quick-actions{position:fixed;bottom:200px;left:0;right:0;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:0 16px;z-index:12;opacity:0;animation:hi .8s ease-out 1.5s forwards;transition:opacity .3s}
 #quick-actions.hidden{opacity:0;pointer-events:none!important}
-@media (max-width:640px){#quick-actions{bottom:235px}}
+.qa-chip{pointer-events:auto}
+@media (max-width:640px){#quick-actions{bottom:215px;gap:6px;padding:0 12px}}
 .qa-chip{padding:8px 14px;border-radius:18px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.28);color:#cbd5ff;font-size:13px;cursor:pointer;pointer-events:auto;transition:all .2s;-webkit-tap-highlight-color:transparent;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .qa-chip:hover,.qa-chip:active{background:rgba(249,115,22,.18);border-color:rgba(249,115,22,.5);color:#fed7aa;transform:translateY(-1px)}
 
@@ -170,7 +183,6 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
       <button id="send-btn">↑</button>
     </div>
     <div id="hint">Tap me or the mic</div>
-    <button id="lang-toggle-btn" title="Switch mic language">EN</button>
   </div>
   <div id="quick-actions"></div>
   <div id="status-dot">◉ Ready</div>
@@ -214,23 +226,13 @@ const AVATARS=[
 let currentAvatarIdx=0;
 const MODEL_PRIMARY=AVATARS[0].url;
 const MODEL_FALLBACK=AVATARS[1].url;
-// UI language from browser. STT language is user-toggleable (button next to mic).
+// Browser-detected language for UI labels and Web Speech recognition.
+// True auto-detect for STT requires Whisper (server-side) — falls back to this.
 const __langs=navigator.languages||[navigator.language||'en'];
 const __isRu=__langs.some(l=>l&&l.toLowerCase().indexOf('ru')===0);
 document.documentElement.lang=__isRu?'ru':'en';
-// Mutable STT lang — starts from browser preference, user can toggle RU/EN.
-let STT_LANG=__isRu?'ru-RU':'en-US';
-// Helper for code that still references VOICE_LANG (kept as alias for compat).
-let VOICE_LANG=STT_LANG;
-function setSTTLang(lang){
-  STT_LANG=lang;VOICE_LANG=lang;
-  if(typeof recognition!=='undefined'&&recognition){try{recognition.lang=lang;}catch(_){}}
-  const $b=document.getElementById('lang-toggle-btn');
-  if($b)$b.textContent=lang.startsWith('ru')?'RU':'EN';
-  try{localStorage.setItem('alice_stt_lang',lang);}catch(_){}
-}
-// Restore saved choice
-try{const saved=localStorage.getItem('alice_stt_lang');if(saved==='ru-RU'||saved==='en-US')STT_LANG=VOICE_LANG=saved;}catch(_){}
+// Use the user's most-preferred language verbatim (e.g. "ru-RU", "en-GB").
+const VOICE_LANG=(navigator.language||'en-US');
 function detectLang(text){return /[Ѐ-ӿ]/.test(text||'')?'ru':'en';}
 function voiceFor(lang){return lang==='ru'?'ru-RU-SvetlanaNeural':'en-US-AriaNeural';}
 const PARTICLE_COUNT=40;
@@ -304,8 +306,9 @@ function initVRM(gltf, flip=false){
     if(headBone){
       const headPos=new THREE.Vector3();
       headBone.getWorldPosition(headPos);
-      camera.position.set(0, headPos.y+0.06, 0.65);
-      camera.lookAt(0, headPos.y+0.02, 0);
+      // Camera raised: target a bit above the head (top of hair) so face/forehead aren't cropped
+      camera.position.set(0, headPos.y+0.10, 0.55);
+      camera.lookAt(0, headPos.y+0.08, 0);
       console.log('[VRM] Head at y='+headPos.y.toFixed(3));
     }
     // Portrait mode: shift model down so top widgets are visible
@@ -536,10 +539,27 @@ function stopMic(){if(micStream){micStream.getTracks().forEach(t=>t.stop());micS
 function getMicLvl(){if(!analyser)return 0;const d=new Uint8Array(analyser.frequencyBinCount);analyser.getByteFrequencyData(d);let s=0;for(let i=0;i<d.length;i++)s+=d[i];return s/d.length/255;}
 function getBassLvl(){if(!analyser)return 0;const d=new Uint8Array(analyser.frequencyBinCount);analyser.getByteFrequencyData(d);let s=0;for(let i=0;i<8;i++)s+=d[i];return s/8/255;}
 function stripEmoji(s){return s.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu,'').replace(/\s{2,}/g,' ').trim();}
+// Strip markdown so chat reads clean and TTS doesn't say "asterisk asterisk".
+function stripMarkdown(s){
+  if(!s)return s;
+  return s
+    .replace(/```[\s\S]*?```/g,'')                     // fenced code blocks
+    .replace(/`([^`]+)`/g,'$1')                         // `inline code`
+    .replace(/\*\*([^*]+)\*\*/g,'$1')                   // **bold**
+    .replace(/__([^_]+)__/g,'$1')                       // __bold__
+    .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g,'$1')        // *italic*
+    .replace(/(?<!\w)_([^_\n]+)_(?!\w)/g,'$1')          // _italic_
+    .replace(/!?\[([^\]]+)\]\([^)]+\)/g,'$1')           // [text](url) → text
+    .replace(/^\s*#{1,6}\s+/gm,'')                       // # heading
+    .replace(/^\s*[-*+]\s+/gm,'• ')                      // bullets
+    .replace(/^\s*>\s?/gm,'')                            // > blockquote
+    .replace(/[ \t]+/g,' ')                              // collapse spaces
+    .trim();
+}
 // Always use server TTS in guest mode — auto-detects language per message
 let useServerTTS=true;
 function speak(text){
-  const cleanText=stripEmoji(text);
+  const cleanText=stripEmoji(stripMarkdown(text));
   if(!cleanText)return Promise.resolve(speakEnd());
   return speakServer(cleanText);
 }
@@ -569,7 +589,8 @@ function showHint(t,b){$hint.textContent=t;$hint.className=b?'bright':'';clearTi
 function addMsg(t,type){
   const el=document.createElement('div');
   el.className='msg '+type;
-  el.textContent=t;
+  // Strip markdown so chat doesn't show ** and bullets as raw text.
+  el.textContent=type==='alice'?stripMarkdown(t):t;
   $chat.appendChild(el);
   // keep last 40 messages, scroll to bottom
   while($chat.children.length>40)$chat.firstChild.remove();
@@ -611,7 +632,8 @@ const STATUS_LABELS=__isRu
 stLis.push(s=>{$statusDot.textContent=STATUS_LABELS[s]||'◉';musicDetectTimer=0;musicFadeTimer=0;});
 
 /* ===== WHISPER STT FALLBACK (for iPad/Safari/Huawei) ===== */
-let useWhisperSTT=false; // guest mode uses Web Speech API with user-selected language
+// Guest mode: Whisper auto-detects language regardless of OS settings
+let useWhisperSTT=true;
 let mediaRecorder=null;
 let audioChunks=[];
 let whisperVAD=null; // VAD interval for auto-stop
