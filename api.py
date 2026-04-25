@@ -76,6 +76,19 @@ TELEGRAM_LEAD_CHAT_ID = os.getenv('TELEGRAM_LEAD_CHAT_ID', '')
 LEADS_LOG = Path(os.getenv('ALICE_LEADS_LOG', WORKSPACE / 'leads.jsonl'))
 CHAT_LOG = Path(os.getenv('ALICE_CHAT_LOG', WORKSPACE.parent / 'chat.jsonl'))
 
+# ----- Rate limits (configurable via ENV) -----
+# Format: RATE_LIMIT_<endpoint>_REQUESTS / RATE_LIMIT_<endpoint>_WINDOW (seconds)
+RATE_LIMITS = {
+    'chat': (int(os.getenv('RATE_LIMIT_CHAT_REQUESTS', '100')),
+             int(os.getenv('RATE_LIMIT_CHAT_WINDOW',   '600'))),
+    'lead': (int(os.getenv('RATE_LIMIT_LEAD_REQUESTS', '10')),
+             int(os.getenv('RATE_LIMIT_LEAD_WINDOW',   '3600'))),
+    'stt':  (int(os.getenv('RATE_LIMIT_STT_REQUESTS',  '200')),
+             int(os.getenv('RATE_LIMIT_STT_WINDOW',    '600'))),
+    'tts':  (int(os.getenv('RATE_LIMIT_TTS_REQUESTS',  '300')),
+             int(os.getenv('RATE_LIMIT_TTS_WINDOW',    '600'))),
+}
+
 # ----- Calendars (personal only) -----
 
 CREDS_DIR = '/root/.openclaw/credentials/google'
@@ -190,7 +203,10 @@ _rate_lock = Lock()
 _rate_buckets = defaultdict(lambda: defaultdict(deque))  # endpoint -> ip -> deque[timestamps]
 
 def rate_limit(endpoint, limit, window_sec):
-    """Check sliding-window rate limit. Returns True if allowed."""
+    """Check sliding-window rate limit. Returns (allowed, ip).
+
+    `limit` and `window_sec` come from RATE_LIMITS / ENV at call site.
+    """
     ip = request.headers.get('CF-Connecting-IP') or request.remote_addr or 'unknown'
     now = time.time()
     with _rate_lock:
@@ -291,7 +307,7 @@ def chat():
 
     ip = None
     if GUEST_MODE:
-        ok, ip = rate_limit('chat', limit=10, window_sec=600)
+        ok, ip = rate_limit('chat', *RATE_LIMITS['chat'])
         if not ok:
             return jsonify({'reply': "Too many messages — wait a few minutes. / Слишком часто, подожди немного."}), 429
 
@@ -346,7 +362,7 @@ def lead():
     if not GUEST_MODE:
         return jsonify({'error': 'not available'}), 404
 
-    ok, ip = rate_limit('lead', limit=3, window_sec=3600)
+    ok, ip = rate_limit('lead', *RATE_LIMITS['lead'])
     if not ok:
         return jsonify({'error': 'rate_limited'}), 429
 
@@ -466,7 +482,7 @@ def stt_via_gemini(audio_bytes, mime_type):
 @app.route('/api/stt', methods=['POST'])
 def stt():
     if GUEST_MODE:
-        ok, ip = rate_limit('stt', limit=20, window_sec=600)
+        ok, ip = rate_limit('stt', *RATE_LIMITS['stt'])
         if not ok:
             return jsonify({'text': '', 'error': 'rate_limited'}), 429
 
@@ -497,7 +513,7 @@ def stt():
 @app.route('/api/tts', methods=['POST'])
 def tts():
     if GUEST_MODE:
-        ok, ip = rate_limit('tts', limit=30, window_sec=600)
+        ok, ip = rate_limit('tts', *RATE_LIMITS['tts'])
         if not ok:
             return jsonify({'error': 'rate_limited'}), 429
 
@@ -600,7 +616,10 @@ def health():
     return jsonify({
         'status': 'ok',
         'mode': 'guest' if GUEST_MODE else 'personal',
-        'time': datetime.now().isoformat()
+        'time': datetime.now().isoformat(),
+        'rate_limits': {
+            k: {'requests': r, 'window_sec': w} for k, (r, w) in RATE_LIMITS.items()
+        },
     })
 
 

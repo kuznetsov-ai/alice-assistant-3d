@@ -42,27 +42,36 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 .state-party .aura-1{background:radial-gradient(ellipse,rgba(236,72,153,.4),transparent 70%);animation:ad1 2s ease-in-out infinite}
 .state-party .aura-2{background:radial-gradient(ellipse,rgba(168,85,247,.25),transparent 70%);animation:ad2 2.5s ease-in-out infinite}
 
-/* 3D avatar widget — anchored from the bottom; fixed gap to chips/mic, no overlap */
+/* 3D avatar widget — fits Telegram-WebView viewports (~700px usable height) */
 #avatar-canvas{
   position:fixed !important;
   inset:auto !important;
   top:auto !important;
-  bottom:280px !important;       /* leaves clean room for chips (200px) + mic/input below */
+  /* Anchor band: 280..430 from bottom on desktop. Stays clear of chips (200) below
+     and leaves a 30px gap above for chat (#chat-area bottom: 460). */
+  bottom:280px !important;
   left:50% !important;
   transform:translateX(-50%) !important;
-  width:160px !important;
-  height:160px !important;
+  width:200px !important;
+  height:150px !important;
   z-index:8 !important;
   pointer-events:none !important;
-  border-radius:50%;
-  mask-image:radial-gradient(circle,black 60%,transparent 100%);
-  -webkit-mask-image:radial-gradient(circle,black 60%,transparent 100%);
+  border-radius:18px;
+  mask-image:
+    linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%),
+    linear-gradient(to right,  transparent 0%, black 14%, black 86%, transparent 100%);
+  mask-composite:intersect;
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%),
+    linear-gradient(to right,  transparent 0%, black 14%, black 86%, transparent 100%);
+  -webkit-mask-composite:source-in;
 }
 @media (max-width:640px){
   #avatar-canvas{
-    width:120px !important;
-    height:120px !important;
-    bottom:300px !important;     /* mobile: extra clearance from raised chips */
+    /* Mobile: 300..430 from bottom (height=130). chat.bottom=460 → 30px gap. */
+    width:170px !important;
+    height:130px !important;
+    bottom:300px !important;
   }
 }
 .aura{display:none !important}
@@ -78,15 +87,15 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 .load-fill{height:100%;background:rgba(249,115,22,.6);border-radius:2px;transition:width .3s}
 
 /* Chat — top, centered horizontally, ends 30px above the avatar (NEVER overlaps).
-   Left padding 60px so messages don't slip under the avatar-switcher chips. */
+   Left padding so messages don't slip under the avatar-switcher chips on the left. */
 #chat-area{
   position:fixed;
   top:max(56px,env(safe-area-inset-top,56px));
   left:50%;
   transform:translateX(-50%);
   width:min(640px,calc(100vw - 76px));
-  /* avatar.bottom-from-viewport-bottom (280) + avatar.height (160) + 30px gap */
-  bottom:470px;
+  /* desktop: avatar 280 + 150 + 30 = 460 ; mobile: avatar 300 + 130 + 30 = 460 */
+  bottom:460px;
   max-height:none;
   display:flex;
   flex-direction:column;
@@ -105,8 +114,8 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 .msg.alice{align-self:flex-start;background:rgba(20,20,28,.92);border:1px solid rgba(249,115,22,.3);color:#f5f5f7;border-bottom-left-radius:4px}
 @keyframes mi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @media (max-width:640px){
-  /* mobile avatar: bottom 300 + height 120 + 30 gap = 450 */
-  #chat-area{ bottom:450px; padding:12px 10px 16px }
+  /* mobile uses same chat.bottom = 460 for consistent layout math */
+  #chat-area{ bottom:460px; padding:12px 10px 16px }
   .msg{font-size:14.5px;padding:11px 14px}
 }
 
@@ -271,18 +280,22 @@ const stLis=[];
 function setState(s){if(s===curState)return;curState=s;$app.className='state-'+s;stLis.forEach(fn=>fn(s));}
 
 /* ===== THREE.JS SCENE ===== */
-// Guest mode: fixed-size circular avatar widget (140px desktop, 96px mobile)
-function avatarSize(){return window.matchMedia('(max-width: 640px)').matches?96:140;}
+// Guest mode: wider rectangular avatar widget (220×200 desktop, 180×170 mobile).
+// Width > height → camera aspect = width/height so face fills frame without distortion.
+function avatarDims(){
+  return window.matchMedia('(max-width: 640px)').matches
+    ? {w:170,h:130}
+    : {w:200,h:150};
+}
 const renderer=new THREE.WebGLRenderer({canvas:$avC,antialias:true,alpha:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-// updateStyle=false: don't touch CSS, our stylesheet controls layout
-renderer.setSize(avatarSize(),avatarSize(),false);
+{const d=avatarDims();renderer.setSize(d.w,d.h,false);}
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.2;
 
-// Square aspect for square viewport
-const camera=new THREE.PerspectiveCamera(26,1,0.1,20);
+// Aspect ratio matches widget so face is not stretched
+const camera=new THREE.PerspectiveCamera(26,avatarDims().w/avatarDims().h,0.1,20);
 camera.position.set(0,1.35,0.6);
 camera.lookAt(0,1.30,0);
 
@@ -318,9 +331,10 @@ function initVRM(gltf, flip=false){
     if(headBone){
       const headPos=new THREE.Vector3();
       headBone.getWorldPosition(headPos);
-      // Camera raised: target a bit above the head (top of hair) so face/forehead aren't cropped
-      camera.position.set(0, headPos.y+0.10, 0.55);
-      camera.lookAt(0, headPos.y+0.08, 0);
+      // Universal framing — pulled slightly back, look-at slightly low
+      // so any VRM (custom alice-e or stock A/B) shows whole head without cropping
+      camera.position.set(0, headPos.y+0.05, 0.65);
+      camera.lookAt(0, headPos.y+0.02, 0);
       console.log('[VRM] Head at y='+headPos.y.toFixed(3));
     }
     // Portrait mode: shift model down so top widgets are visible
@@ -591,10 +605,9 @@ function stopCurrentAudio(){
 function speak(text){
   const cleanText=stripEmoji(stripMarkdown(text));
   if(!cleanText)return Promise.resolve(speakEnd());
-  // Russian browser voices sound robotic on most devices — use edge-tts Ava (multilingual).
-  // English browser voices are fine and start instantly — use them.
+  // Browser TTS for both RU and EN — instant start, native voices.
+  // Server edge-tts only kicks in if synth is unavailable or fails to start.
   if(useServerTTS||!synth)return speakServer(cleanText);
-  if(detectLang(cleanText)==='ru')return speakServer(cleanText);
   return speakBrowser(cleanText);
 }
 function speakBrowser(text){
@@ -679,9 +692,6 @@ function addMsg(t,type){
   // keep last 40 messages, scroll to bottom
   while($chat.children.length>40)$chat.firstChild.remove();
   requestAnimationFrame(()=>{$chat.scrollTop=$chat.scrollHeight;});
-  // hide quick actions after first user/alice exchange
-  const $qa2=document.getElementById('quick-actions');
-  if($qa2)$qa2.classList.add('hidden');
   return el;
 }
 function fadeMsg(){/* no-op in guest mode — chat history persists */}
@@ -822,10 +832,11 @@ $avC.addEventListener('click',e=>{e.preventDefault();isLis?stopLis():startLis();
 $tIn.addEventListener('keydown',e=>{if(e.key==='Enter'&&$tIn.value.trim()){handleMsg($tIn.value.trim());$tIn.value='';$tIn.blur();}});
 $sBtn.addEventListener('click',()=>{if($tIn.value.trim()){handleMsg($tIn.value.trim());$tIn.value='';}});
 window.addEventListener('resize',()=>{
-  // Avatar widget stays square at our fixed CSS size; just update DPR-aware buffer
-  camera.aspect=1;
+  // Avatar widget stays rectangular at our fixed CSS size; sync renderer + camera aspect
+  const d=avatarDims();
+  camera.aspect=d.w/d.h;
   camera.updateProjectionMatrix();
-  renderer.setSize(avatarSize(),avatarSize(),false);
+  renderer.setSize(d.w,d.h,false);
   resizeBg();
   applyPortraitOffset();
 });
@@ -887,8 +898,8 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(
 
 async function greet(){
   const msgs=__isRu
-    ? ["Привет! Я Алиса — AI-представитель Жени. Что хочешь узнать?","Хей! Я Алиса 🦊 Расскажу про Женины проекты.","Привет! Спрашивай — про работу, проекты, или как с ним связаться."]
-    : ["Hey! I'm Alice — Eugene's AI rep. What do you want to know?","Hi! I'm Alice 🦊 Ask me about Eugene's projects or work.","Hey there! Curious about Eugene? Ask away — projects, stack, or how to reach him."];
+    ? ["Привет! Я Алиса — AI-ассистент Жени"]
+    : ["Hey! I'm Alice - Eugene's AI Assistant"];
   const m=msgs[Math.floor(Math.random()*msgs.length)];
   addMsg(m,'alice');
   await speak(m);
@@ -902,7 +913,7 @@ const $qa=document.getElementById('quick-actions');
 QUICK_ACTIONS.forEach(a=>{
   const b=document.createElement('button');
   b.className='qa-chip';b.textContent=a.l;
-  b.addEventListener('click',()=>{handleMsg(a.q);$qa.style.display='none';});
+  b.addEventListener('click',()=>handleMsg(a.q));
   $qa.appendChild(b);
 });
 

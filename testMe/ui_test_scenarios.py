@@ -11,9 +11,13 @@ from scenarios.base import BaseScenario
 
 
 VIEWPORTS = {
-    "desktop": {"width": 1440, "height": 900},
-    "tablet":  {"width": 768,  "height": 1024},
-    "mobile":  {"width": 393,  "height": 852},
+    "desktop":     {"width": 1440, "height": 900},
+    "tablet":      {"width": 768,  "height": 1024},
+    "mobile":      {"width": 393,  "height": 852},
+    # Mimics Telegram in-app browser & similar embedded WebViews where top/bottom
+    # bars eat ~150px of usable height. This is the regression that bit on real iPhone.
+    "mobile_short":{"width": 393,  "height": 700},
+    "tiny":        {"width": 360,  "height": 640},
 }
 
 
