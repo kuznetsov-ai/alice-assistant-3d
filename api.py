@@ -26,7 +26,8 @@ Environment:
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-import os, requests, json, time
+import os, requests, json, time, base64
+from io import BytesIO
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict, deque
 from pathlib import Path
@@ -403,6 +404,64 @@ def lead():
 # ============================================================
 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+
+
+def stt_via_groq(audio_bytes, filename, mime_type):
+    """Primary STT: Groq Whisper (fast, ~free)."""
+    if not GROQ_API_KEY:
+        return None
+    try:
+        data = {'model': 'whisper-large-v3-turbo'}
+        if not GUEST_MODE:
+            data['language'] = 'ru'
+        resp = requests.post(
+            'https://api.groq.com/openai/v1/audio/transcriptions',
+            headers={'Authorization': f'Bearer {GROQ_API_KEY}'},
+            files={'file': (filename, BytesIO(audio_bytes), mime_type)},
+            data=data, timeout=30
+        )
+        if resp.status_code == 200:
+            return (resp.json().get('text') or '').strip()
+        print(f"[STT] groq {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        print(f"[STT] groq error: {e}")
+    return None
+
+
+def stt_via_gemini(audio_bytes, mime_type):
+    """Fallback STT: Google Gemini 2.0 Flash multimodal — auto-detects language."""
+    if not GEMINI_API_KEY:
+        return None
+    try:
+        b64 = base64.b64encode(audio_bytes).decode()
+        url = (
+            'https://generativelanguage.googleapis.com/v1beta/models/'
+            'gemini-2.0-flash:generateContent?key=' + GEMINI_API_KEY
+        )
+        body = {
+            'contents': [{'parts': [
+                {'text': (
+                    'Transcribe this audio verbatim. Auto-detect the language. '
+                    'Return ONLY the transcription text — no preamble, '
+                    'no language tags, no quotes, no markdown.'
+                )},
+                {'inline_data': {'mime_type': mime_type, 'data': b64}},
+            ]}],
+            'generationConfig': {'temperature': 0.0, 'maxOutputTokens': 500},
+        }
+        resp = requests.post(url, json=body, timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            cand = (data.get('candidates') or [{}])[0]
+            parts = (cand.get('content') or {}).get('parts') or []
+            text = (parts[0].get('text') if parts else '') or ''
+            return text.strip().strip('"').strip()
+        print(f"[STT] gemini {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        print(f"[STT] gemini error: {e}")
+    return None
+
 
 @app.route('/api/stt', methods=['POST'])
 def stt():
@@ -415,24 +474,24 @@ def stt():
         return jsonify({'text': ''}), 400
 
     audio_file = request.files['audio']
-    try:
-        # In guest mode: don't lock language — let Whisper auto-detect
-        data = {'model': 'whisper-large-v3-turbo'}
-        if not GUEST_MODE:
-            data['language'] = 'ru'
-        resp = requests.post(
-            'https://api.groq.com/openai/v1/audio/transcriptions',
-            headers={'Authorization': f'Bearer {GROQ_API_KEY}'},
-            files={'file': (audio_file.filename, audio_file.stream, audio_file.content_type)},
-            data=data,
-            timeout=30
-        )
-        text = resp.json().get('text', '')
-        print(f"[STT] '{text}'")
-        return jsonify({'text': text})
-    except Exception as e:
-        print(f"[STT] error: {e}")
-        return jsonify({'text': ''}), 500
+    audio_bytes = audio_file.read()
+    mime_type = audio_file.content_type or 'audio/webm'
+    filename = audio_file.filename or 'voice.webm'
+
+    # Primary: Groq Whisper
+    text = stt_via_groq(audio_bytes, filename, mime_type)
+    if text:
+        print(f"[STT/groq] '{text[:100]}'")
+        return jsonify({'text': text, 'engine': 'groq'})
+
+    # Fallback: Gemini multimodal (auto-detect language, free tier)
+    text = stt_via_gemini(audio_bytes, mime_type)
+    if text:
+        print(f"[STT/gemini] '{text[:100]}'")
+        return jsonify({'text': text, 'engine': 'gemini'})
+
+    print('[STT] no engine returned text')
+    return jsonify({'text': '', 'error': 'no_transcription'}), 502
 
 
 @app.route('/api/tts', methods=['POST'])
@@ -445,7 +504,8 @@ def tts():
     import asyncio, tempfile, edge_tts
     data = request.get_json() or {}
     text = (data.get('text') or '').strip()
-    voice = data.get('voice') or ('en-US-AriaNeural' if GUEST_MODE else 'ru-RU-SvetlanaNeural')
+    # Multilingual voice in guest mode — same character regardless of language
+    voice = data.get('voice') or ('en-US-AvaMultilingualNeural' if GUEST_MODE else 'ru-RU-SvetlanaNeural')
     if not text:
         return jsonify({'error': 'no text'}), 400
     try:

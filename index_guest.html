@@ -6,9 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#080810">
-<meta name="description" content="Alice — AI representative for Evgenii Kuznetsov. Ask about projects, work, or how to reach him.">
+<meta name="description" content="Alice — Eugene's AI Assistant. Ask about projects, work, or how to reach him.">
 <meta name="robots" content="noindex">
-<title>Alice — Eugene's AI rep</title>
+<title>Alice - Eugene's AI Assistant</title>
 
 <script async src="https://ga.jspm.io/npm:es-module-shims@2.5.1/dist/es-module-shims.js" crossorigin="anonymous"></script>
 <script type="importmap">
@@ -42,16 +42,16 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 .state-party .aura-1{background:radial-gradient(ellipse,rgba(236,72,153,.4),transparent 70%);animation:ad1 2s ease-in-out infinite}
 .state-party .aura-2{background:radial-gradient(ellipse,rgba(168,85,247,.25),transparent 70%);animation:ad2 2.5s ease-in-out infinite}
 
-/* 3D avatar widget — centered on screen (vertical & horizontal middle). */
+/* 3D avatar widget — anchored from the bottom; fixed gap to chips/mic, no overlap */
 #avatar-canvas{
   position:fixed !important;
   inset:auto !important;
-  top:50% !important;
+  top:auto !important;
+  bottom:280px !important;       /* leaves clean room for chips (200px) + mic/input below */
   left:50% !important;
-  bottom:auto !important;
-  transform:translate(-50%,-50%) !important;
-  width:180px !important;
-  height:180px !important;
+  transform:translateX(-50%) !important;
+  width:160px !important;
+  height:160px !important;
   z-index:8 !important;
   pointer-events:none !important;
   border-radius:50%;
@@ -59,9 +59,16 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
   -webkit-mask-image:radial-gradient(circle,black 60%,transparent 100%);
 }
 @media (max-width:640px){
-  #avatar-canvas{ width:140px !important; height:140px !important; }
+  #avatar-canvas{
+    width:120px !important;
+    height:120px !important;
+    bottom:300px !important;     /* mobile: extra clearance from raised chips */
+  }
 }
 .aura{display:none !important}
+/* Avatar switcher: smaller, tucked top-left, never collides with the chat column */
+#avatar-switcher{top:8px !important;left:8px !important;gap:4px !important;z-index:15}
+#avatar-switcher .av-btn{width:28px !important;height:28px !important;font-size:12px !important;border-width:1.5px !important}
 #bg-canvas{position:fixed;inset:0;z-index:0;opacity:.4}
 
 /* Loading */
@@ -70,14 +77,17 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 .load-bar{width:200px;height:3px;background:rgba(255,255,255,.1);border-radius:2px;margin:12px auto 0;overflow:hidden}
 .load-fill{height:100%;background:rgba(249,115,22,.6);border-radius:2px;transition:width .3s}
 
-/* Chat — top, centered horizontally, fixed width column */
+/* Chat — top, centered horizontally, ends 30px above the avatar (NEVER overlaps).
+   Left padding 60px so messages don't slip under the avatar-switcher chips. */
 #chat-area{
   position:fixed;
   top:max(56px,env(safe-area-inset-top,56px));
   left:50%;
   transform:translateX(-50%);
-  width:min(640px,calc(100vw - 28px));
-  max-height:calc(50vh - 110px);
+  width:min(640px,calc(100vw - 76px));
+  /* avatar.bottom-from-viewport-bottom (280) + avatar.height (160) + 30px gap */
+  bottom:470px;
+  max-height:none;
   display:flex;
   flex-direction:column;
   gap:10px;
@@ -95,7 +105,8 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 .msg.alice{align-self:flex-start;background:rgba(20,20,28,.92);border:1px solid rgba(249,115,22,.3);color:#f5f5f7;border-bottom-left-radius:4px}
 @keyframes mi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @media (max-width:640px){
-  #chat-area{ max-height:calc(45vh - 80px); padding:12px 10px 16px }
+  /* mobile avatar: bottom 300 + height 120 + 30 gap = 450 */
+  #chat-area{ bottom:450px; padding:12px 10px 16px }
   .msg{font-size:14.5px;padding:11px 14px}
 }
 
@@ -121,18 +132,18 @@ body{font-family:-apple-system,'SF Pro Display','Helvetica Neue',sans-serif;colo
 
 /* Info widget — single consolidated panel */
 #info-widget{position:absolute;top:12px;right:12px;padding:8px 12px;background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.15);border-radius:8px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:11px;font-family:'SF Mono',Menlo,monospace;color:rgba(165,180,252,.55);pointer-events:none;z-index:5;opacity:0;animation:hi 1s ease-out .5s forwards;line-height:1.6;white-space:nowrap}
-#status-dot{position:absolute;bottom:12px;left:12px;font-size:11px;font-family:'SF Mono',Menlo,monospace;color:rgba(165,180,252,.45);pointer-events:none;z-index:5;opacity:0;animation:hi 1s ease-out .8s forwards}
+#status-dot{position:absolute;bottom:12px;left:12px;font-size:11px;font-family:'SF Mono',Menlo,monospace;color:#34d399;pointer-events:none;z-index:5;opacity:0;animation:hi 1s ease-out .8s forwards;text-shadow:0 0 8px rgba(52,211,153,.4)}
 #avatar-switcher{position:absolute;top:12px;left:12px;display:flex;flex-direction:column;gap:6px;z-index:20;opacity:0;animation:hi 1s ease-out 1s forwards}
 .av-btn{width:36px;height:36px;border-radius:50%;border:2px solid rgba(165,180,252,.2);background:rgba(99,102,241,.08);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .3s;-webkit-tap-highlight-color:transparent}
 .av-btn:hover,.av-btn.active{border-color:rgba(249,115,22,.6);background:rgba(249,115,22,.15)}
 .av-btn:active{transform:scale(.9)}
 @keyframes hi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-/* Quick-action chips (between centered avatar and the input row) */
-#quick-actions{position:fixed;bottom:200px;left:0;right:0;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:0 16px;z-index:12;opacity:0;animation:hi .8s ease-out 1.5s forwards;transition:opacity .3s}
+/* Quick-action chips — fixed band below the avatar, above the mic */
+#quick-actions{position:fixed;bottom:200px;left:0;right:0;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:0 16px;z-index:12;opacity:0;animation:hi .8s ease-out 1.5s forwards;transition:opacity .3s;pointer-events:none}
 #quick-actions.hidden{opacity:0;pointer-events:none!important}
 .qa-chip{pointer-events:auto}
-@media (max-width:640px){#quick-actions{bottom:215px;gap:6px;padding:0 12px}}
+@media (max-width:640px){#quick-actions{bottom:220px;gap:6px;padding:0 12px}}
 .qa-chip{padding:8px 14px;border-radius:18px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.28);color:#cbd5ff;font-size:13px;cursor:pointer;pointer-events:auto;transition:all .2s;-webkit-tap-highlight-color:transparent;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .qa-chip:hover,.qa-chip:active{background:rgba(249,115,22,.18);border-color:rgba(249,115,22,.5);color:#fed7aa;transform:translateY(-1px)}
 
@@ -234,7 +245,8 @@ document.documentElement.lang=__isRu?'ru':'en';
 // Use the user's most-preferred language verbatim (e.g. "ru-RU", "en-GB").
 const VOICE_LANG=(navigator.language||'en-US');
 function detectLang(text){return /[Ѐ-ӿ]/.test(text||'')?'ru':'en';}
-function voiceFor(lang){return lang==='ru'?'ru-RU-SvetlanaNeural':'en-US-AriaNeural';}
+// One multilingual voice for all languages — same character on RU and EN.
+function voiceFor(_lang){return 'en-US-AvaMultilingualNeural';}
 const PARTICLE_COUNT=40;
 const CHAT_FADE=9000;
 const SC={idle:{h:25,s:90,l:55},listening:{h:187,s:80,l:55},thinking:{h:270,s:65,l:60},speaking:{h:28,s:95,l:60},happy:{h:45,s:90,l:55},party:{h:320,s:85,l:60}};
@@ -529,7 +541,10 @@ recognition.onend=()=>{
   isLis=false;stopMic();vOff();if(curState==='listening')setState('idle');
 };}
 function loadVoice(){if(!synth)return;const pk=()=>{const v=synth.getVoices();for(const n of['google рус','milena','irina','yandex']){const f=v.find(x=>x.name.toLowerCase().includes(n));if(f){selVoice=f;return;}}selVoice=v.find(x=>x.lang.startsWith('ru'))||null;};pk();synth.onvoiceschanged=pk;}
-async function startLis(){if(isSpk&&synth){synth.cancel();isSpk=false;}
+async function startLis(){
+  // Hitting the mic interrupts whatever Alice is saying.
+  stopCurrentAudio();
+  if(isSpk&&synth){synth.cancel();isSpk=false;}
 if(useWhisperSTT){startWhisperRec();return;}
 if(!recognition){showHint('Голос не поддерживается');return;}
 try{audioCtx=audioCtx||new(AudioContext||webkitAudioContext)();if(audioCtx.state==='suspended')await audioCtx.resume();micStream=await navigator.mediaDevices.getUserMedia({audio:true});const s=audioCtx.createMediaStreamSource(micStream);analyser=audioCtx.createAnalyser();analyser.fftSize=256;s.connect(analyser);}catch(e){}
@@ -556,25 +571,94 @@ function stripMarkdown(s){
     .replace(/[ \t]+/g,' ')                              // collapse spaces
     .trim();
 }
-// Always use server TTS in guest mode — auto-detects language per message
-let useServerTTS=true;
+// Browser TTS primary (instant) → server edge-tts fallback (better quality but slow).
+// Fallback engages only on Huawei/HarmonyOS or when synth never starts within 1.5s.
+let useServerTTS=/huawei|harmonyos|hmscore/i.test(navigator.userAgent||'');
+let currentAudio=null;        // active <audio> element from edge-tts
+let currentAudioUrl=null;     // its blob: URL
+let currentTTSAbort=null;     // abort controller for in-flight /api/tts fetch
+function stopCurrentAudio(){
+  // Hard-stop any speaking — used when user starts a new message before Alice finished.
+  if(currentTTSAbort){try{currentTTSAbort.abort();}catch(_){} currentTTSAbort=null;}
+  if(currentAudio){
+    try{currentAudio.pause();currentAudio.currentTime=0;currentAudio.src='';}catch(_){}
+    currentAudio=null;
+  }
+  if(currentAudioUrl){try{URL.revokeObjectURL(currentAudioUrl);}catch(_){} currentAudioUrl=null;}
+  if(synth){try{synth.cancel();}catch(_){}}
+  isSpk=false;
+}
 function speak(text){
   const cleanText=stripEmoji(stripMarkdown(text));
   if(!cleanText)return Promise.resolve(speakEnd());
-  return speakServer(cleanText);
+  // Russian browser voices sound robotic on most devices — use edge-tts Ava (multilingual).
+  // English browser voices are fine and start instantly — use them.
+  if(useServerTTS||!synth)return speakServer(cleanText);
+  if(detectLang(cleanText)==='ru')return speakServer(cleanText);
+  return speakBrowser(cleanText);
+}
+function speakBrowser(text){
+  const lang=detectLang(text);
+  return new Promise(res=>{
+    try{synth.cancel();}catch(_){}
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang=lang==='ru'?'ru-RU':'en-US';
+    u.rate=1.05;u.pitch=1.05;
+    // Pick a matching voice if the OS provides one
+    try{
+      const voices=synth.getVoices()||[];
+      const match=voices.find(v=>v.lang&&v.lang.toLowerCase().startsWith(u.lang.toLowerCase()));
+      if(match)u.voice=match;
+    }catch(_){}
+    let done=false,started=false,startCheck=0,safety=0;
+    const finish=()=>{if(done)return;done=true;clearTimeout(safety);clearTimeout(startCheck);isSpk=false;speakEnd();res();};
+    u.onstart=()=>{started=true;isSpk=true;setState('speaking');speakT0=performance.now()/1000;};
+    u.onend=finish;u.onerror=finish;
+    isSpk=true;setState('speaking');
+    synth.speak(u);if(synth.paused)synth.resume();
+    // If synth doesn't start within 1.5s, kick over to edge-tts permanently
+    startCheck=setTimeout(()=>{
+      if(!started&&!done){
+        try{synth.cancel();}catch(_){}
+        useServerTTS=true;done=true;clearTimeout(safety);
+        speakServer(text).then(res);
+      }
+    },1500);
+    safety=setTimeout(()=>{if(!done){try{synth.cancel();}catch(_){} finish();}},25000);
+  });
 }
 function speakServer(text){
   const lang=detectLang(text);
   const voice=voiceFor(lang);
   return new Promise(res=>{
     isSpk=true;setState('speaking');speakT0=performance.now()/1000;
-    fetch(API+'/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,voice,lang})})
+    currentTTSAbort=new AbortController();
+    fetch(API+'/api/tts',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text,voice,lang}),
+      signal:currentTTSAbort.signal,
+    })
     .then(r=>r.blob()).then(blob=>{
-      const url=URL.createObjectURL(blob);const a=new Audio(url);
-      a.onended=()=>{URL.revokeObjectURL(url);isSpk=false;speakEnd();res();};
-      a.onerror=()=>{URL.revokeObjectURL(url);isSpk=false;speakEnd();res();};
-      a.play().catch(()=>{isSpk=false;speakEnd();res();});
-    }).catch(()=>{isSpk=false;speakEnd();res();});
+      // If we got aborted/superseded between fetch and play — skip
+      if(!isSpk){res();return;}
+      currentAudioUrl=URL.createObjectURL(blob);
+      const a=new Audio(currentAudioUrl);
+      currentAudio=a;
+      const finish=()=>{
+        if(currentAudio===a){
+          if(currentAudioUrl){try{URL.revokeObjectURL(currentAudioUrl);}catch(_){} currentAudioUrl=null;}
+          currentAudio=null;isSpk=false;speakEnd();
+        }
+        res();
+      };
+      a.onended=finish;a.onerror=finish;
+      a.play().catch(finish);
+    }).catch(e=>{
+      // Aborted on purpose? swallow silently.
+      if(e&&e.name==='AbortError'){res();return;}
+      isSpk=false;speakEnd();res();
+    });
   });
 }
 let replyMood='neutral';
@@ -603,6 +687,8 @@ function addMsg(t,type){
 function fadeMsg(){/* no-op in guest mode — chat history persists */}
 async function handleMsg(text){
   if(!text)return;
+  // If Alice is still speaking from a previous turn, cut her off — user has the floor.
+  stopCurrentAudio();
   const userLangIsRu=detectLang(text)==='ru';
   addMsg(text,'user');setState('thinking');
   showHint(userLangIsRu?'Думаю…':'Thinking…',true);
