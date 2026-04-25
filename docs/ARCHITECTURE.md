@@ -181,11 +181,42 @@ In-memory sliding window per IP, configurable via ENV:
 RATE_LIMITS = {
   'chat': (int(os.getenv('RATE_LIMIT_CHAT_REQUESTS','100')),
            int(os.getenv('RATE_LIMIT_CHAT_WINDOW','600'))),
-  ...
+  'lead': (int(os.getenv('RATE_LIMIT_LEAD_REQUESTS','10')),
+           int(os.getenv('RATE_LIMIT_LEAD_WINDOW','3600'))),
+  'stt':  (int(os.getenv('RATE_LIMIT_STT_REQUESTS','200')),
+           int(os.getenv('RATE_LIMIT_STT_WINDOW','600'))),
+  'tts':  (int(os.getenv('RATE_LIMIT_TTS_REQUESTS','300')),
+           int(os.getenv('RATE_LIMIT_TTS_WINDOW','600'))),
 }
 ```
 
-`/api/health` reports current limits — useful for verifying changes without sshing in.
+To change a limit on the running production:
+
+```bash
+ssh root@89.167.108.210
+nano /opt/alice-guest/.env             # adjust RATE_LIMIT_<endpoint>_<REQUESTS|WINDOW>
+systemctl restart alice-guest          # picks up new ENV
+curl http://localhost:5578/api/health  # verify (rate_limits field in JSON)
+```
+
+`/api/health` returns the live values:
+
+```json
+{
+  "mode": "guest",
+  "status": "ok",
+  "time": "2026-04-25T17:33:49.350096",
+  "rate_limits": {
+    "chat": {"requests": 100, "window_sec": 600},
+    "lead": {"requests": 10,  "window_sec": 3600},
+    "stt":  {"requests": 200, "window_sec": 600},
+    "tts":  {"requests": 300, "window_sec": 600}
+  }
+}
+```
+
+Default values match a moderate testing/early-launch posture. For production lockdown,
+typical values are `chat: 10/600`, `lead: 3/3600`, `stt: 20/600`, `tts: 30/600`.
 
 ---
 
@@ -327,13 +358,36 @@ stylesheet wins.
 | State machine | `idle` / `listening` / `thinking` / `speaking` / `happy` / `party` |
 | Idle micro-actions | glance, smile, head tilt, deep breath (3–7s intervals) |
 
-### 6.3 Voice routing
+#### Tuning the camera framing
+
+The camera went through 4 iterations before settling. Three avatar models (`alice-e`,
+`AvatarSample_A`, `AvatarSample_B`) have different head-bone heights, so anything that worked
+for one cropped another. Final values are intentionally moderate — the camera target sits
+just below the head so the forehead doesn't hit the top edge, and the camera distance (0.65)
+gives enough vertical room for hair on all three models. We don't `applyPortraitOffset`
+in guest mode (no-op, lest it write inline styles back to the canvas).
+
+### 6.3 Persistent quick-action chips
+
+The four chips (`Projects`, `What he does`, `Stack`, `Contact`) **stay visible permanently**.
+Earlier they auto-hid after the first message — that turned out to be an annoyance for users
+who wanted to jump topics mid-conversation. The chips' click handlers just call `handleMsg`
+with the canned question; chips don't toggle their own visibility.
+
+### 6.4 Avatar switcher (top-left dots)
+
+Three small (28×28) circular buttons let visitors swap between `🌸 alice-e`, `🍊 Sample A`,
+`💜 Sample B`. Z-index 15 keeps them above the chat column on narrow viewports; the chat's
+`width: min(640px, 100vw - 76px)` rule reserves the 60-px-wide left strip for the switcher.
+
+### 6.5 Voice routing
 
 ```js
 function speak(text) {
   // 1. If a previous reply is still playing, stop it (barge-in support)
-  // 2. If browser synth is available — use it (instant, native voice)
-  // 3. Else fall back to /api/tts (edge-tts mp3)
+  // 2. Strip markdown + emoji from text
+  // 3. Use browser speechSynthesis when available (instant, native voice for both RU and EN)
+  // 4. Fall back to edge-tts /api/tts (en-US-AvaMultilingualNeural — single voice for both languages)
 }
 
 function startLis() {
@@ -352,6 +406,27 @@ synth.cancel();
 currentTTSAbort.abort();   // cancels any in-flight /api/tts fetch
 isSpk = false;
 ```
+
+#### Why both languages use browser TTS now
+
+Initially we routed RU → edge-tts (Ava Multilingual, server-side) and EN → browser
+`speechSynthesis`. The reason was: most iOS Russian voices sound robotic. But edge-tts
+generates the mp3 in real-time speed, so a 5-second reply takes 5 seconds to start playing
+— users complained "she's slow on Russian". Switched both languages to browser TTS;
+quality is acceptable on iPhones with the *Enhanced* Russian voices (Milena, Yuri) installed.
+edge-tts (Ava Multilingual) remains as the fallback when `synth` doesn't start within 1.5s
+or on devices like Huawei (HarmonyOS) where browser TTS is broken.
+
+#### Lang detection
+
+```js
+function detectLang(text) {
+  return /[Ѐ-ӿ]/.test(text || '') ? 'ru' : 'en';
+}
+```
+
+Cyrillic Unicode block triggers Russian voice/handling; everything else defaults to English.
+Used both for picking `recognition.lang` (for Web Speech STT) and `voiceFor` (for TTS routing).
 
 ---
 
@@ -454,10 +529,32 @@ Last run: **21 passed, 0 failed**.
 
 ## 11. Known gotchas
 
-- **Three.js setSize** writes inline width/height to the canvas. CSS uses `!important`. Always pass `setSize(w, h, false)` so it doesn't touch styles.
-- **iOS Safari Web Speech API** is locale-locked — without an explicit `recognition.lang`, dictation is poor. We use `navigator.language` as the default; for true auto-detect Whisper has to do it.
-- **Telegram WebView** eats ~150 px of vertical space. Mobile layout must work down to ~700 px usable height — `mobile_short` Titan viewport prevents regressions.
-- **edge-tts is real-time speed** — long replies sound delayed. Browser `speechSynthesis` is preferred when available.
-- **Russian browser TTS** quality varies wildly per device — `en-US-AvaMultilingualNeural` (edge-tts) handles Russian remarkably well as a fallback.
-- **`docker rm` is forbidden** — stopped containers should stay stopped, never deleted, so they can be `start`ed instantly.
-- **Personal Alice in Docker**: when changing `~/.openclaw/openclaw.json` the OpenClaw runtime hot-reloads `agents.defaults.model.primary`. Confirm with `docker logs alice-assistant-openclaw-gateway-1`.
+- **Three.js setSize** writes inline width/height to the canvas. CSS uses `!important`.
+  Always pass `setSize(w, h, false)` so the renderer doesn't touch styles.
+- **`applyPortraitOffset` is a no-op in guest mode** — the older code wrote `style.position`
+  and `style.top` directly on the canvas, which fought our CSS. Guest version strips any
+  inline overrides on every resize.
+- **iOS Safari Web Speech API** is locale-locked — without an explicit `recognition.lang`,
+  dictation is poor. We use `navigator.language` as the default; for true auto-detect
+  Whisper has to do it (Groq → Gemini fallback chain).
+- **Telegram WebView** eats ~150 px of vertical space. Mobile layout must work down to
+  ~700 px usable height — `mobile_short` Titan viewport prevents regressions.
+- **edge-tts is real-time speed** — long replies sound delayed. Browser `speechSynthesis`
+  is preferred for both languages now; edge-tts is fallback (Huawei/HarmonyOS, or when
+  synth doesn't start within 1.5s).
+- **Russian browser TTS** quality varies wildly per device — `en-US-AvaMultilingualNeural`
+  (edge-tts) handles Russian remarkably well as a fallback. Best Russian iOS voices to
+  install: *Milena (Enhanced)* or *Yuri (Enhanced)* in Settings → Accessibility →
+  Spoken Content → Voices.
+- **Markdown leaks into TTS** — without `stripMarkdown`, the synthesizer reads "asterisk
+  asterisk Alice asterisk asterisk" for `**Alice**`. Always strip before `speak()`. The
+  chat panel also strips markdown for visual consistency (DeepSeek replies often contain
+  `**bold**` and bulleted lists).
+- **Quick-action chips persist** — they used to auto-hide after the first reply, but
+  that frustrated users who wanted to jump topics mid-conversation. Now they stay.
+- **`docker rm` is forbidden** — stopped containers should stay stopped, never deleted,
+  so they can be `start`ed instantly. See `feedback_docker_stop_policy.md`.
+- **Personal Alice in Docker**: when changing `~/.openclaw/openclaw.json` the OpenClaw
+  runtime hot-reloads `agents.defaults.model.primary`. Confirm with
+  `docker logs alice-assistant-openclaw-gateway-1`. To avoid name confusion, **always**
+  call the personal one *Alice* and the guest one *Aliska* (internal naming convention).
